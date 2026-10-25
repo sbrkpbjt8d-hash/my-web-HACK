@@ -1,19 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  output: 'export', // دي أهم خطوة عشان يطلع ملفات ثابتة ينفع تحولها لـ APK
   experimental: {
-    agentFeedback: true,
-  },
-  cacheComponents: true,
-  partialPrefetching: true,
-  reactCompiler: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
+    // باقي إعداداتك القديمة زي ما هي لو حابب تسيبها
   },
 };
 

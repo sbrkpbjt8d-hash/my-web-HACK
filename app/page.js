@@ -302,8 +302,8 @@ export default function ElarabyStoreDemo() {
             gap: '8px'
           }}
         >
-          <span>📷🎙️</span>
-          <span>العروض الحاليه للل</span>
+          <span></span>
+          <span>العروض الحاليه </span>
         </button>
       </div>
 
