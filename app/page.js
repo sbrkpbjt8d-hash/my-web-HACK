@@ -226,7 +226,7 @@ export default function ElarabyStoreDemo() {
           }}
         >
           <span>📷</span>
-          <span>فتح الكاميرا</span>
+          <span>فتح الكاميرا يا اخى</span>
         </button>
       </div>
 
