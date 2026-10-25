@@ -23,20 +23,38 @@ export default function ElarabyStoreDemo() {
       const currentId = isMobileDevice ? `mobile-${Math.floor(Math.random() * 1000)}` : 'laptop-admin-stream';
       setIsLaptop(!isMobileDevice);
 
-      const peer = new Peer(currentId);
+      // إعدادات Peer مع إضافة STUN Servers لضمان تجاوز عوائق الشبكات في مصر
+      const peer = new Peer(currentId, {
+        host: '0.peerjs.com',
+        port: 443,
+        secure: true,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' }
+          ]
+        }
+      });
 
       peer.on('open', (id) => {
+        console.log("🟢 تم الاتصال بسيرفر Peer بنجاح! والـ ID الخاص بهذا الجهاز هو:", id);
         setPeerId(id);
         if (!isMobileDevice) {
           setStatusMessage('🖥️ شاشة اللابتوب جاهزة لاستقبال بث الكاميرا...');
         }
       });
 
+      peer.on('error', (err) => {
+        console.error("🔴 خطأ في سيرفر PeerJS:", err);
+      });
+
       // استقبال البث على شاشة اللابتوب
       peer.on('call', (call) => {
+        console.log("📥 تم استلام مكالمة فيديو/بث مباشر جديدة!");
         setStatusMessage('📡 جاري استقبال البث المباشر من الموبايل...');
         call.answer(); // قبول المكالمة/البث
         call.on('stream', (remoteStream) => {
+          console.log("🎥 تم استلام الـ Stream بنجاح وعرضه على الشاشة!");
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
             remoteVideoRef.current.play().catch((e) => console.log('Error playing video:', e));
@@ -74,9 +92,11 @@ export default function ElarabyStoreDemo() {
 
       // إرسال البث المباشر إلى اللابتوب باستخدام الـ Target ID الثابت
       if (peerInstance.current) {
+        console.log("🚀 جاري الاتصال بالـ Target ID:", targetPeerId);
         const call = peerInstance.current.call(targetPeerId, stream);
         if (call) {
           setStatusMessage('🟢 تم فتح الكاميرا وجاري بث الصورة للابتوب...');
+          console.log("🟢 تم بدء إرسال البث بنجاح.");
         } else {
           setErrorMessage('⚠️ لم يتم العثور على اللابتوب، تأكد من فتح الصفحة عليه أولاً.');
         }
