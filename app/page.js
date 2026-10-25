@@ -55,11 +55,21 @@ export default function ElarabyStoreDemo() {
         call.answer(); // قبول المكالمة/البث
         call.on('stream', (remoteStream) => {
           console.log("🎥 تم استلام الـ Stream بنجاح وعرضه على الشاشة!");
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = remoteStream;
-            remoteVideoRef.current.play().catch((e) => console.log('Error playing video:', e));
+          const video = remoteVideoRef.current;
+          if (video) {
+            video.muted = true;
+            video.onloadedmetadata = () => {
+              video.play().then(() => {
+                setErrorMessage('');
+                setStatusMessage('🟢 البث الحي للموبايل شغال الآن على اللابتوب!');
+              }).catch((error) => {
+                console.error('Error playing remote video:', error);
+                video.controls = true;
+                setErrorMessage('⚠️ تعذر تشغيل الفيديو تلقائياً. استخدم زر التشغيل لبدء العرض.');
+              });
+            };
+            video.srcObject = remoteStream;
           }
-          setStatusMessage('🟢 البث الحي للموبايل شغال الآن على اللابتوب!');
         });
       });
 
@@ -226,7 +236,7 @@ export default function ElarabyStoreDemo() {
           <div style={{ backgroundColor: '#005bb5', color: '#fff', padding: '4px 10px', fontSize: '11px', textAlign: 'center', fontWeight: 'bold' }}>
             شاشة المراقبة والاستقبال المباشر
           </div>
-          <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
+          <video ref={remoteVideoRef} autoPlay playsInline muted style={{ width: '100%', height: 'calc(100% - 23px)', objectFit: 'cover' }} />
         </div>
       )}
 
